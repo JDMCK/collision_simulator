@@ -1,6 +1,12 @@
 build
 out
 .cache
-.idea
 .vs
 .vscode
+bin
+CMakeFiles
+*.cmake
+_deps
+Makefile
+CMakeCache.txt
+.gitignore
