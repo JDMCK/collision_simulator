@@ -6,9 +6,7 @@
 enum Tag
 {
     PLAYER,
-    ENEMY,
-    TILE,
-    PROJECTILE,
+    PLATFORM,
     DEFAULT
 };
 
@@ -27,8 +25,16 @@ class Entity
 
 public:
 
-    std::shared_ptr<CTransform> cTransform;
-    std::shared_ptr<CShape>     cShape;
+    std::shared_ptr<CTransform>      cTransform;
+    std::shared_ptr<CGravity>        cGravity;
+    std::shared_ptr<CCircleShape>    cCircleShape;
+    std::shared_ptr<CRectShape>      cRectShape;
+    std::shared_ptr<CInput>          cInput;
+    std::shared_ptr<CLifespan>       cLifespan;
+    std::shared_ptr<CCircleCollider> cCircleCollider;
+    std::shared_ptr<CRectCollider>   cRectCollider;
+    std::shared_ptr<CInvulnerable>   cInvulnerable;
+    std::shared_ptr<CParentChild>    cParentChild;
 
     const size_t id() const;
     const Tag tag() const;
