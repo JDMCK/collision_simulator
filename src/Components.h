@@ -131,8 +131,7 @@ public:
     float halfWidth  = 0.0f;
     float halfHeight = 0.0f;
 
-    float prevOx = 0.0f;
-    float prevOy = 0.0f;
+    bool isFixed = false;
 
     bool isCollidedTop   = false;
     bool isCollidedBot   = false;

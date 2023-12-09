@@ -55,9 +55,13 @@ void Game::spawnPlatforms()
     p2->cRectShape = std::make_shared<CRectShape>(30, 175, sf::Color::Blue, sf::Color::White, 0);
 
     auto p3 = m_entities.addEntity(PLATFORM);
-    p3->cTransform = std::make_shared<CTransform>(Vec2(m_windowWidth - 400, m_windowHeight - 100));
+    p3->cTransform = std::make_shared<CTransform>(Vec2(m_windowWidth - 600, m_windowHeight - 200));
     p3->cRectCollider = std::make_shared<CRectCollider>(30, 30);
     p3->cRectShape = std::make_shared<CRectShape>(30, 30, sf::Color::White, sf::Color::White, 0);
+
+    p1->cRectCollider->isFixed = true;
+    p2->cRectCollider->isFixed = true;
+    p3->cRectCollider->isFixed = true;
 }
 
 void Game::setPaused(bool paused)
@@ -253,7 +257,10 @@ void Game::sPlayerInput()
 
             e->cTransform->velocity.x = horizontalVel;
 
-            if (e->cInput->jump && e->cRectCollider->isCollidedBot) e->cTransform->velocity.y = -20.0f;
+            if (e->cInput->jump && e->cRectCollider->isCollidedBot) 
+            {
+                e->cTransform->velocity.y = -20.0f;
+            }
 
             if (e->cInput->place)
             {
@@ -267,6 +274,7 @@ void Game::sPlayerInput()
                     p->cRectShape = std::make_shared<CRectShape>(100, 30,
                         sf::Color(rand() % 255, rand() % 255, rand() % 255, 255), sf::Color::White, 0);
                     p->cRectCollider = std::make_shared<CRectCollider>(100, 30);
+                    p->cGravity = std::make_shared<CGravity>();
 
                     m_placeCooldown = 60;
                 }
@@ -310,18 +318,117 @@ void Game::sRender()
     }
 }
 
+void resolveCollision(std::shared_ptr<Entity> e1, std::shared_ptr<Entity> e2, float ox, float oy)
+{
+    // If one or both entities are fixed, e1 will be to simplify the control flow below. If they are both fixed, they will never collide.    
+    if (e2->cRectCollider->isFixed)
+    {
+        std::shared_ptr<Entity> temp = e1;
+        e1 = e2;
+        e2 = temp;
+    }
+
+    // Resolves non-fixed entity or both by shifting position by overlap in the min overlap direction.
+    if (ox <= oy)
+    {
+        if (e1->cTransform->position.x <= e2->cTransform->position.x) // e1 colliding from left, e2 colliding from right
+        {
+            if (e1->cRectCollider->isFixed)
+            {
+                e2->cTransform->position.x += ox;
+                e2->cTransform->velocity.x = 0;
+            } else {
+                e1->cTransform->position.x -= ox;
+                e1->cTransform->velocity.x = 0;
+            }
+            e1->cRectCollider->isCollidedRight = true;
+            e2->cRectCollider->isCollidedLeft = true;
+        } else // e1 colliding from right, e2 collding from left
+        {
+            if (e1->cRectCollider->isFixed)
+            {
+                e2->cTransform->position.x -= ox;
+                e2->cTransform->velocity.x = 0;
+            } else
+            {
+                e1->cTransform->position.x += ox;
+                e1->cTransform->velocity.x = 0;
+            }
+            
+            e1->cRectCollider->isCollidedLeft = true;
+            e2->cRectCollider->isCollidedRight = true;
+        }
+    } else
+    {
+        if (e1->cTransform->position.y <= e2->cTransform->position.y) // e1 colliding from top, e2 colliding from bot
+        {
+            if (e1->cRectCollider->isFixed)
+            {
+                e2->cTransform->position.y += oy;
+                e2->cTransform->velocity.y = 0;
+            } else
+            {
+                e1->cTransform->position.y -= oy;
+                e1->cTransform->velocity.y = 0;
+            }
+            e1->cRectCollider->isCollidedBot = true;
+            e2->cRectCollider->isCollidedTop = true;
+        } else // e1 colliding from bot, e2 collding from top
+        {
+            if (e1->cRectCollider->isFixed)
+            {
+                e2->cTransform->position.y -= oy;
+                e2->cTransform->velocity.y = 0;
+            } else
+            {
+                e1->cTransform->position.y += oy;
+                e1->cTransform->velocity.y = 0;
+            }
+            e1->cRectCollider->isCollidedTop = true;
+            e2->cRectCollider->isCollidedBot = true;
+        }
+    }
+}
+
 void Game::sCollision()
 {
+    // Resetting all collisions to false and fixing stationary objects in place.
+    for (auto& e : m_entities.getEntities())
+    {
+        if (e->cRectCollider)
+        {
+            e->cRectCollider->isCollidedBot = false;
+            e->cRectCollider->isCollidedTop = false;
+            e->cRectCollider->isCollidedLeft = false;
+            e->cRectCollider->isCollidedRight = false;
+        }
+    }
+
+    for (int i = 0; i < m_entities.getEntities().size() - 1; i++)
+    {
+        for (int j = i + 1; j < m_entities.getEntities().size(); j++)
+        {
+            std::shared_ptr<Entity> e1 = m_entities.getEntities()[i];
+            std::shared_ptr<Entity> e2 = m_entities.getEntities()[j];
+
+            if (e1->cRectCollider && e1->cTransform && e2->cRectCollider && e2->cTransform)
+            {
+                float dx = abs(e1->cTransform->position.x - e2->cTransform->position.x);
+                float dy = abs(e1->cTransform->position.y - e2->cTransform->position.y);
+                float ox = e1->cRectCollider->halfWidth + e2->cRectCollider->halfWidth - dx;
+                float oy = e1->cRectCollider->halfHeight + e2->cRectCollider->halfHeight - dy;
+
+                if (ox > 0 && oy > 0) {
+                    resolveCollision(e1, e2, ox, oy);
+                }
+            }
+        }
+    }
     sPlayerCollision();
 }
 
 void Game::sPlayerCollision()
 {
-    m_player->cRectCollider->isCollidedBot = false;
-    m_player->cRectCollider->isCollidedTop = false;
-    m_player->cRectCollider->isCollidedLeft = false;
-    m_player->cRectCollider->isCollidedRight = false;
-
     // Bottom of screen collision
     if (m_player->cTransform->position.y + m_player->cRectCollider->halfHeight > m_windowHeight)
     {
@@ -329,56 +436,56 @@ void Game::sPlayerCollision()
         m_player->cTransform->velocity.y = 0;
         m_player->cRectCollider->isCollidedBot = true;
     }
-    for (auto& p : m_entities.getEntitiesByTag(PLATFORM))
-    {
-        if (p->cTransform && p->cRectCollider)
-        {
-            float dx = abs(m_player->cTransform->position.x - p->cTransform->position.x);
-            float dy = abs(m_player->cTransform->position.y - p->cTransform->position.y);
-            float ox = m_player->cRectCollider->halfWidth + p->cRectCollider->halfWidth - dx;
-            float oy = m_player->cRectCollider->halfHeight + p->cRectCollider->halfHeight - dy;
+    // for (auto& p : m_entities.getEntitiesByTag(PLATFORM))
+    // {
+    //     if (p->cTransform && p->cRectCollider)
+    //     {
+    //         float dx = abs(m_player->cTransform->position.x - p->cTransform->position.x);
+    //         float dy = abs(m_player->cTransform->position.y - p->cTransform->position.y);
+    //         float ox = m_player->cRectCollider->halfWidth + p->cRectCollider->halfWidth - dx;
+    //         float oy = m_player->cRectCollider->halfHeight + p->cRectCollider->halfHeight - dy;
             
-            if (ox > 0 && oy > 0)
-            {
-                if (p->cRectCollider->prevOx > 0 && m_player->cTransform->position.y < p->cTransform->position.y) // Tp
-                {    
-                    m_player->cTransform->position.y -= oy;
-                    m_player->cTransform->velocity.y = 0;
-                    m_player->cRectCollider->isCollidedBot = true;
+    //         if (ox > 0 && oy > 0)
+    //         {
+    //             if (p->cRectCollider->prevOx > 0 && m_player->cTransform->position.y < p->cTransform->position.y) // Tp
+    //             {    
+    //                 m_player->cTransform->position.y -= oy;
+    //                 m_player->cTransform->velocity.y = 0;
+    //                 m_player->cRectCollider->isCollidedBot = true;
 
-                } else if (p->cRectCollider->prevOx > 0 && m_player->cTransform->position.y > p->cTransform->position.y) // Bot
-                {
-                    m_player->cTransform->position.y += oy;
-                    m_player->cTransform->velocity.y = 0;
-                    m_player->cRectCollider->isCollidedTop = true;
-                } else if (p->cRectCollider->prevOy > 0 && m_player->cTransform->position.x < p->cTransform->position.x) // Left
-                {
-                    m_player->cTransform->position.x -= ox;
-                    m_player->cTransform->velocity.x = 0;
-                    m_player->cRectCollider->isCollidedRight = true;
-                } else if (p->cRectCollider->prevOy > 0 && m_player->cTransform->position.x > p->cTransform->position.x) // Right
-                {
-                    m_player->cTransform->position.x += ox;
-                    m_player->cTransform->velocity.x = 0;
-                    m_player->cRectCollider->isCollidedLeft = true;
-                } else if (m_player->cTransform->position.x > p->cTransform->position.x) // Diagonal cases
-                {
-                    m_player->cTransform->position.x += ox;
-                    m_player->cTransform->velocity.x = 0;
-                    m_player->cRectCollider->isCollidedLeft = true;
-                } else
-                {
-                    m_player->cTransform->position.x -= ox;
-                    m_player->cTransform->velocity.x = 0;
-                    m_player->cRectCollider->isCollidedRight = true;
-                }
-            } else
-            {
-                p->cRectCollider->prevOx = ox;
-                p->cRectCollider->prevOy = oy;
-            }
-        }
-    }
+    //             } else if (p->cRectCollider->prevOx > 0 && m_player->cTransform->position.y > p->cTransform->position.y) // Bot
+    //             {
+    //                 m_player->cTransform->position.y += oy;
+    //                 m_player->cTransform->velocity.y = 0;
+    //                 m_player->cRectCollider->isCollidedTop = true;
+    //             } else if (p->cRectCollider->prevOy > 0 && m_player->cTransform->position.x < p->cTransform->position.x) // Left
+    //             {
+    //                 m_player->cTransform->position.x -= ox;
+    //                 m_player->cTransform->velocity.x = 0;
+    //                 m_player->cRectCollider->isCollidedRight = true;
+    //             } else if (p->cRectCollider->prevOy > 0 && m_player->cTransform->position.x > p->cTransform->position.x) // Right
+    //             {
+    //                 m_player->cTransform->position.x += ox;
+    //                 m_player->cTransform->velocity.x = 0;
+    //                 m_player->cRectCollider->isCollidedLeft = true;
+    //             } else if (m_player->cTransform->position.x > p->cTransform->position.x) // Diagonal cases
+    //             {
+    //                 m_player->cTransform->position.x += ox;
+    //                 m_player->cTransform->velocity.x = 0;
+    //                 m_player->cRectCollider->isCollidedLeft = true;
+    //             } else
+    //             {
+    //                 m_player->cTransform->position.x -= ox;
+    //                 m_player->cTransform->velocity.x = 0;
+    //                 m_player->cRectCollider->isCollidedRight = true;
+    //             }
+    //         } else
+    //         {
+    //             p->cRectCollider->prevOx = ox;
+    //             p->cRectCollider->prevOy = oy;
+    //         }
+    //     }
+    // }
 }
 
 void Game::respawnPlayer()
